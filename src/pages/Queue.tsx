@@ -14,6 +14,23 @@ const getSnappedDate = (date: Date | string | number) => {
   return d;
 };
 
+export const getQueueItemDuration = (item: any, services: any[]) => {
+  if (item.customDuration) return item.customDuration;
+  if (!item.serviceIds || item.serviceIds.length === 0) return 60;
+  return item.serviceIds.reduce((total: number, id: string) => {
+    const service = services.find(s => s.id === id);
+    return total + (service?.durationMinutes || 0);
+  }, 0);
+};
+
+export const getQueueItemPrice = (item: any, services: any[]) => {
+  if (!item.serviceIds || item.serviceIds.length === 0) return 0;
+  return item.serviceIds.reduce((total: number, id: string) => {
+    const service = services.find(s => s.id === id);
+    return total + (service?.price || 0);
+  }, 0);
+};
+
 export function Queue() {
   const { state, dispatch } = useAppStore();
   const [viewMode, setViewMode] = useState<'list' | 'timeline' | 'completed'>('list');
@@ -24,7 +41,7 @@ export function Queue() {
   
   // Form State
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
-  const [selectedServiceId, setSelectedServiceId] = useState('');
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
   const [selectedTherapistId, setSelectedTherapistId] = useState('');
   const [notes, setNotes] = useState('');
   const [isReservation, setIsReservation] = useState(false);
@@ -65,7 +82,7 @@ export function Queue() {
 
   const handleAddToQueue = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCustomerId || !selectedServiceId) return;
+    if (!selectedCustomerId || selectedServiceIds.length === 0) return;
     if (isReservation && !scheduledTime) return;
 
     dispatch({
@@ -73,7 +90,7 @@ export function Queue() {
       payload: {
         id: `q${Date.now()}`,
         customerId: selectedCustomerId,
-        serviceId: selectedServiceId,
+        serviceIds: selectedServiceIds,
         therapistId: selectedTherapistId || undefined,
         status: 'waiting',
         createdAt: new Date().toISOString(),
@@ -116,7 +133,7 @@ export function Queue() {
 
   const resetForm = () => {
     setSelectedCustomerId('');
-    setSelectedServiceId('');
+    setSelectedServiceIds([]);
     setSelectedTherapistId('');
     setNotes('');
     setIsReservation(false);
@@ -240,8 +257,7 @@ export function Queue() {
     baseDate.setHours(newHour, newMinute, 0, 0);
 
     // Calculate duration
-    const service = state.services.find(s => s.id === draggedItem.serviceId);
-    const duration = draggedItem.customDuration || service?.durationMinutes || 60;
+    const duration = getQueueItemDuration(draggedItem, state.services);
     
     let finalStartTime = baseDate.getTime();
     let finalEndTime = finalStartTime + duration * 60000;
@@ -255,8 +271,7 @@ export function Queue() {
         const qDate = q.isReservation && q.scheduledTime ? new Date(q.scheduledTime) : new Date(q.createdAt);
         return isSameDay(qDate, baseDate);
       }).map(q => {
-        const qService = state.services.find(s => s.id === q.serviceId);
-        const qDuration = q.customDuration || qService?.durationMinutes || 60;
+        const qDuration = getQueueItemDuration(q, state.services);
         const qDate = q.isReservation && q.scheduledTime ? new Date(q.scheduledTime) : new Date(q.createdAt);
         const snappedStart = getSnappedDate(qDate).getTime();
         return { start: snappedStart, end: snappedStart + qDuration * 60000 };
@@ -347,7 +362,7 @@ export function Queue() {
       const draggedItem = state.queue.find(q => q.id === editingQueueId);
       if (!draggedItem) return;
 
-      const newDuration = editCustomDuration ? Number(editCustomDuration) : (state.services.find(s => s.id === draggedItem.serviceId)?.durationMinutes || 60);
+      const newDuration = editCustomDuration ? Number(editCustomDuration) : getQueueItemDuration(draggedItem, state.services);
       const newStartTime = new Date(editScheduledTime).getTime();
       const newEndTime = newStartTime + newDuration * 60000;
 
@@ -369,8 +384,7 @@ export function Queue() {
           const qDate = q.isReservation && q.scheduledTime ? new Date(q.scheduledTime) : new Date(q.createdAt);
           return isSameDay(qDate, new Date(editScheduledTime));
         }).map(q => {
-          const qService = state.services.find(s => s.id === q.serviceId);
-          const qDuration = q.customDuration || qService?.durationMinutes || 60;
+          const qDuration = getQueueItemDuration(q, state.services);
           const qDate = q.isReservation && q.scheduledTime ? new Date(q.scheduledTime) : new Date(q.createdAt);
           return { ...q, start: qDate.getTime(), duration: qDuration };
         }).sort((a, b) => a.start - b.start);
@@ -506,7 +520,7 @@ export function Queue() {
                   ) : (
                     activeQueue.map((q) => {
                       const customer = state.customers.find(c => c.id === q.customerId);
-                      const service = state.services.find(s => s.id === q.serviceId);
+                      const services = q.serviceIds ? q.serviceIds.map(id => state.services.find(s => s.id === id)).filter(Boolean) : [];
                       const therapist = state.therapists.find(t => t.id === q.therapistId);
                       const availableTherapists = state.therapists.filter(t => t.status === 'available');
 
@@ -543,8 +557,8 @@ export function Queue() {
                               <p className="text-gray-500">{q.customDuration} mnt</p>
                             ) : (
                               <>
-                                <p className="text-[#2C302E]">{service?.name}</p>
-                                <p className="text-xs text-gray-500">{service?.durationMinutes} mnt</p>
+                                <p className="text-[#2C302E]">{services.map(s => s?.name).join(', ')}</p>
+                                <p className="text-xs text-gray-500">{getQueueItemDuration(q, state.services)} mnt - Rp {getQueueItemPrice(q, state.services).toLocaleString('id-ID')}</p>
                               </>
                             )}
                           </td>
@@ -575,7 +589,7 @@ export function Queue() {
                             {q.status === 'in-progress' && q.startTime && (
                               <div className="flex items-center mt-2 text-xs text-orange-600 font-medium">
                                 <Clock className="w-3 h-3 mr-1" />
-                                {differenceInMinutes(new Date(), new Date(q.startTime))} / {q.isBreak ? q.customDuration : service?.durationMinutes} mnt
+                                {differenceInMinutes(new Date(), new Date(q.startTime))} / {q.isBreak ? q.customDuration : getQueueItemDuration(q, state.services)} mnt
                               </div>
                             )}
                           </td>
@@ -627,7 +641,7 @@ export function Queue() {
                   ) : (
                     state.queue.filter(q => q.status === 'completed').map((q) => {
                       const customer = state.customers.find(c => c.id === q.customerId);
-                      const service = state.services.find(s => s.id === q.serviceId);
+                      const services = q.serviceIds ? q.serviceIds.map(id => state.services.find(s => s.id === id)).filter(Boolean) : [];
                       const therapist = state.therapists.find(t => t.id === q.therapistId);
                       return (
                         <tr key={q.id} className="hover:bg-gray-50/50 transition-colors">
@@ -637,8 +651,9 @@ export function Queue() {
                           <td className="px-6 py-4 font-medium text-[#2C302E]">
                             {customer?.name}
                           </td>
-                          <td className="px-6 py-4 text-[#2C302E]">
-                            {service?.name}
+                          <td className="px-6 py-4">
+                            <p className="text-[#2C302E]">{services.map(s => s?.name).join(', ')}</p>
+                            <p className="text-xs text-gray-500">{getQueueItemDuration(q, state.services)} mnt - Rp {getQueueItemPrice(q, state.services).toLocaleString('id-ID')}</p>
                           </td>
                           <td className="px-6 py-4 text-[#7C9082]">
                             {therapist?.name}
@@ -733,7 +748,7 @@ export function Queue() {
                             className="absolute top-2 bottom-2 rounded-lg border-2 border-dashed border-[#7C9082] bg-[#7C9082]/10 z-10 pointer-events-none"
                             style={{
                               left: `${((dragOverTime.getHours() - 8) * 60 + dragOverTime.getMinutes()) / (15 * 60) * 100}%`,
-                              width: `${((state.services.find(s => s.id === state.queue.find(q => q.id === draggedId)?.serviceId)?.durationMinutes || 60) / (15 * 60)) * 100}%`
+                              width: `${(getQueueItemDuration(state.queue.find(q => q.id === draggedId) || {}, state.services) / (15 * 60)) * 100}%`
                             }}
                           />
                         )}
@@ -749,8 +764,8 @@ export function Queue() {
                           const startMinutesFrom8 = (startHour - 8) * 60 + startMinute;
                           const leftPercent = Math.max(0, (startMinutesFrom8 / (15 * 60)) * 100);
                           
-                          const service = state.services.find(s => s.id === q.serviceId);
-                          const duration = q.customDuration || service?.durationMinutes || 60;
+                          const services = q.serviceIds ? q.serviceIds.map(id => state.services.find(s => s.id === id)).filter(Boolean) : [];
+                          const duration = getQueueItemDuration(q, state.services);
                           const elapsed = q.status === 'in-progress' && q.startTime ? differenceInMinutes(new Date(), new Date(q.startTime)) : 0;
                           const isDelayed = q.status === 'in-progress' && elapsed > duration;
                           const delay = isDelayed ? elapsed - duration : 0;
@@ -799,7 +814,7 @@ export function Queue() {
                                       {isDelayed && <span className="text-[10px] font-bold text-red-600">+{delay}m</span>}
                                       {q.status === 'in-progress' && !isDelayed && <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse shrink-0 ml-1" />}
                                     </div>
-                                    <span className="text-[10px] text-gray-500 truncate">{service?.name}</span>
+                                    <span className="text-[10px] text-gray-500 truncate">{services.map(s => s?.name).join(', ')}</span>
                                     <span className="text-[10px] text-gray-400 mt-auto truncate">
                                       {format(itemDate, 'HH:mm')} - {format(new Date(itemDate.getTime() + duration * 60000), 'HH:mm')}
                                     </span>
@@ -824,10 +839,14 @@ export function Queue() {
                                         {q.status === 'in-progress' ? 'Sedang Dilayani' : 'Menunggu'}
                                       </span>
                                     </div>
-                                    <p className="text-gray-300 mb-1.5">{service?.name}</p>
+                                    <p className="text-gray-300 mb-1.5">{services.map(s => s?.name).join(', ')}</p>
                                     <div className="flex items-center gap-1.5 text-gray-400 mb-1">
                                       <Clock className="w-3 h-3" />
                                       <span>{format(itemDate, 'HH:mm')} - {format(new Date(itemDate.getTime() + duration * 60000), 'HH:mm')} ({duration} menit)</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 text-gray-400 mb-1">
+                                      <span className="font-semibold text-gray-300">Total:</span>
+                                      <span>Rp {getQueueItemPrice(q, state.services).toLocaleString('id-ID')}</span>
                                     </div>
                                     {q.notes && (
                                       <div className="mt-2 pt-2 border-t border-gray-700">
@@ -878,18 +897,45 @@ export function Queue() {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="service">Layanan</Label>
-            <Select 
-              id="service" 
-              value={selectedServiceId} 
-              onChange={(e) => setSelectedServiceId(e.target.value)}
-              required
-            >
-              <option value="" disabled>Pilih Layanan...</option>
+            <Label>Layanan (Bisa pilih lebih dari satu)</Label>
+            <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto p-2 border border-[#E8E6E1] rounded-md bg-gray-50">
               {state.services.map(s => (
-                <option key={s.id} value={s.id}>{s.name} - {s.durationMinutes} mnt (Rp {s.price.toLocaleString('id-ID')})</option>
+                <label key={s.id} className="flex items-center space-x-3 p-2 hover:bg-white rounded-md cursor-pointer transition-colors border border-transparent hover:border-[#E8E6E1]">
+                  <input
+                    type="checkbox"
+                    className="w-4 h-4 text-[#7C9082] rounded border-gray-300 focus:ring-[#7C9082]"
+                    checked={selectedServiceIds.includes(s.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedServiceIds([...selectedServiceIds, s.id]);
+                      } else {
+                        setSelectedServiceIds(selectedServiceIds.filter(id => id !== s.id));
+                      }
+                    }}
+                  />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900">{s.name}</p>
+                    <p className="text-xs text-gray-500">{s.durationMinutes} mnt</p>
+                  </div>
+                  <div className="text-sm font-medium text-[#7C9082]">
+                    Rp {s.price.toLocaleString('id-ID')}
+                  </div>
+                </label>
               ))}
-            </Select>
+            </div>
+            {selectedServiceIds.length > 0 && (
+              <div className="flex justify-between items-center p-3 bg-[#7C9082]/10 rounded-md mt-2">
+                <span className="text-sm font-medium text-[#2C302E]">Total:</span>
+                <div className="text-right">
+                  <p className="text-sm font-bold text-[#7C9082]">
+                    Rp {selectedServiceIds.reduce((total, id) => total + (state.services.find(s => s.id === id)?.price || 0), 0).toLocaleString('id-ID')}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {selectedServiceIds.reduce((total, id) => total + (state.services.find(s => s.id === id)?.durationMinutes || 0), 0)} menit
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
           
           <div className="grid grid-cols-2 gap-4">

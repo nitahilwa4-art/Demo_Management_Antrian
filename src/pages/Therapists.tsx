@@ -122,9 +122,9 @@ export function Therapists() {
                                 const activeItem = state.queue.find(q => q.therapistId === t.id && q.status === 'in-progress');
                                 if (activeItem) {
                                   if (activeItem.isBreak) return 'Sedang Istirahat';
-                                  const svc = state.services.find(s => s.id === activeItem.serviceId);
+                                  const svcs = activeItem.serviceIds ? activeItem.serviceIds.map(id => state.services.find(s => s.id === id)).filter(Boolean) : [];
                                   const cust = state.customers.find(c => c.id === activeItem.customerId);
-                                  return `${svc?.name || 'Layanan'} - ${cust?.name || 'Pelanggan'}`;
+                                  return `${svcs.map(s => s?.name).join(', ') || 'Layanan'} - ${cust?.name || 'Pelanggan'}`;
                                 }
                                 return '';
                               })()}

@@ -32,7 +32,7 @@ export type QueueStatus = 'waiting' | 'in-progress' | 'completed' | 'cancelled';
 export type QueueItem = {
   id: string;
   customerId?: string;
-  serviceId?: string;
+  serviceIds?: string[];
   therapistId?: string;
   status: QueueStatus;
   createdAt: string;

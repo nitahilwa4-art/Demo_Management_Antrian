@@ -18,6 +18,16 @@ export function Dashboard({ onNavigate }: { onNavigate: (tab: string) => void })
   const inProgressCount = todayQueue.filter(q => q.status === 'in-progress').length;
   const completedCount = todayQueue.filter(q => q.status === 'completed').length;
   const availableTherapists = state.therapists.filter(t => t.status === 'available').length;
+  
+  const todayRevenue = todayQueue
+    .filter(q => q.status === 'completed')
+    .reduce((total, q) => {
+      const price = q.serviceIds?.reduce((sum, id) => {
+        const service = state.services.find(s => s.id === id);
+        return sum + (service?.price || 0);
+      }, 0) || 0;
+      return total + price;
+    }, 0);
 
   return (
     <div className="space-y-6">
@@ -26,7 +36,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (tab: string) => void })
         <p className="text-gray-500">Ringkasan aktivitas hari ini, {format(new Date(), 'EEEE, d MMMM yyyy', { locale: id })}</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardContent className="p-6 flex items-center space-x-4">
             <div className="p-3 bg-blue-100 text-blue-600 rounded-2xl">
@@ -71,6 +81,17 @@ export function Dashboard({ onNavigate }: { onNavigate: (tab: string) => void })
             </div>
           </CardContent>
         </Card>
+        <Card>
+          <CardContent className="p-6 flex items-center space-x-4">
+            <div className="p-3 bg-purple-100 text-purple-600 rounded-2xl">
+              <span className="font-bold text-lg">Rp</span>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-500">Pendapatan</p>
+              <h3 className="text-xl font-bold text-[#2C302E]">{todayRevenue.toLocaleString('id-ID')}</h3>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -96,7 +117,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (tab: string) => void })
                   .slice(0, 5)
                   .map(q => {
                     const customer = state.customers.find(c => c.id === q.customerId);
-                    const service = state.services.find(s => s.id === q.serviceId);
+                    const services = q.serviceIds ? q.serviceIds.map(id => state.services.find(s => s.id === id)).filter(Boolean) : [];
                     const therapist = state.therapists.find(t => t.id === q.therapistId);
                     
                     return (
@@ -104,7 +125,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (tab: string) => void })
                         <div>
                           <p className="font-medium text-[#2C302E]">{customer?.name}</p>
                           <div className="flex items-center space-x-2 mt-0.5">
-                            <p className="text-sm text-gray-500">{service?.name}</p>
+                            <p className="text-sm text-gray-500">{services.map(s => s?.name).join(', ')}</p>
                             {q.isReservation && q.scheduledTime && (
                               <Badge variant="neutral" className="text-[10px] px-1.5">{format(new Date(q.scheduledTime), 'HH:mm')}</Badge>
                             )}
@@ -162,9 +183,9 @@ export function Dashboard({ onNavigate }: { onNavigate: (tab: string) => void })
                   if (activeItem.isBreak) {
                     activeText = 'Sedang Istirahat';
                   } else {
-                    const svc = state.services.find(s => s.id === activeItem.serviceId);
+                    const svcs = activeItem.serviceIds ? activeItem.serviceIds.map(id => state.services.find(s => s.id === id)).filter(Boolean) : [];
                     const cust = state.customers.find(c => c.id === activeItem.customerId);
-                    activeText = `${svc?.name || 'Layanan'} - ${cust?.name || 'Pelanggan'}`;
+                    activeText = `${svcs.map(s => s?.name).join(', ') || 'Layanan'} - ${cust?.name || 'Pelanggan'}`;
                   }
                 }
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAppStore } from '../store';
 import { Card, CardContent, CardHeader, CardTitle, Button, Modal, Input, Label } from '../components/ui';
-import { Plus, Search, Clock, DollarSign, Activity } from 'lucide-react';
+import { Plus, Search, Clock, Activity } from 'lucide-react';
 import { isSameDay } from 'date-fns';
 
 export function Services() {
@@ -88,7 +88,7 @@ export function Services() {
                 ) : (
                   filteredServices.map((s) => {
                     const todayBookings = state.queue.filter(q => {
-                      if (q.serviceId !== s.id) return false;
+                      if (!q.serviceIds?.includes(s.id)) return false;
                       const itemDate = q.isReservation && q.scheduledTime ? new Date(q.scheduledTime) : new Date(q.createdAt);
                       return isSameDay(itemDate, new Date());
                     }).length;
@@ -109,8 +109,7 @@ export function Services() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center text-[#2C302E] font-medium">
-                            <DollarSign className="w-4 h-4 text-gray-400 mr-1" />
-                            {s.price.toLocaleString('id-ID')}
+                            Rp {s.price.toLocaleString('id-ID')}
                           </div>
                         </td>
                         <td className="px-6 py-4 text-right">
